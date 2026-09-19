@@ -1,85 +1,88 @@
 # A.J Motorbike Spares & Accessories
 
-**Inventory Management & Point-of-Sale System**
+**Single-shop** Inventory, POS, and business management PWA.
 
-Production-oriented web application for a Kenyan motorcycle spare-parts and accessories shop.
-
-**Currency:** Kenyan Shillings (KSh)
+Currency: **KSh** · Backend: **Firebase Auth + Cloud Firestore only** (no Storage).
 
 ## Features
 
-- Firebase Authentication with role-based access (ADMIN, CASHIER, STOREKEEPER)
-- Product & inventory management with motorcycle compatibility
-- Stock movements audit trail
-- Low-stock and out-of-stock alerts
-- Point of Sale (desktop + mobile-oriented layout)
-- Sales, receipts, returns/refunds
-- Purchases & suppliers
-- Customers
-- Expenses
-- Reports (sales, profit, inventory, payments)
-- Audit log
-- Business settings
-- CSV/Excel export support (via xlsx)
-- Responsive design (mobile, tablet, desktop)
-- PWA-ready manifest
+- Login / roles (ADMIN, MANAGER, CASHIER, STOREKEEPER)
+- Dashboard with sales analysis (today / 7 days / month, payment methods, inventory value)
+- Products & inventory (search, stock status, adjustments)
+- POS with stock-safe checkout and receipt numbers `AJ-000001`
+- Sales history & profit per sale
+- Customers, suppliers, expenses, purchases, stock movements, reports
 
-## Tech Stack
+## Setup (required)
 
-- React 19 + TypeScript
-- Vite
-- Tailwind CSS v4
-- Firebase (Auth, Firestore, Storage)
-- React Router
-- Recharts
-- date-fns, lucide-react, zod, react-hook-form, xlsx
+### 1. Firebase project
 
-## Getting Started
+1. Create project at https://console.firebase.google.com
+2. Enable **Authentication → Email/Password**
+3. Create **Firestore** database (start in production mode)
+4. Deploy rules from `firestore.rules` in this repo
+5. Register a **Web app** and copy config
 
-### 1. Clone
+### 2. Environment variables (Vercel)
 
-```bash
-git clone https://github.com/Levy254885/aj-motorbike-spares.git
-cd aj-motorbike-spares
-npm install
+Set these, then **Redeploy**:
+
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
+
+Do **not** use Storage. No `VITE_FIREBASE_STORAGE_BUCKET` required.
+
+### 3. First admin user
+
+1. Firebase Console → Authentication → Add user  
+   - Email: your admin email (e.g. the shop owner email)  
+   - Password: choose a strong password (never commit it)
+2. Copy the user's **UID**
+3. Firestore → collection `users` → document ID = **UID** with fields:
+
+```json
+{
+  "email": "your-admin@email.com",
+  "displayName": "Admin",
+  "role": "ADMIN",
+  "active": true,
+  "createdAt": "2026-09-19T00:00:00.000Z",
+  "updatedAt": "2026-09-19T00:00:00.000Z"
+}
 ```
 
-### 2. Firebase Setup
+4. Sign in on the deployed app with that email and password.
 
-1. Create a project at [Firebase Console](https://console.firebase.google.com).
-2. Enable **Authentication** → Email/Password.
-3. Create a **Cloud Firestore** database.
-4. Enable **Storage**.
-5. Register a Web app and copy the config.
-6. Copy `.env.example` to `.env` and fill in the values.
+### 4. Indexes
 
-### 3. Create the first Admin user
+If Firestore asks for composite indexes (products active+name, sales createdAt), click the link in the browser console error and create them.
 
-1. In Firebase Authentication, create a user (email + password).
-2. In Firestore, create a document in `users/{uid}` with role ADMIN.
-
-### 4. Security Rules
-
-Deploy `firestore.rules` and `storage.rules`.
-
-### 5. Run
+## Local development
 
 ```bash
+npm install
+cp .env.example .env
+# fill .env
 npm run dev
 ```
 
-## Firestore Collections
+## Production
 
-users, products, categories, suppliers, customers, sales, purchases, stockMovements, expenses, notifications, auditLogs, settings
+```bash
+npm run build
+```
 
-See full field documentation in repository.
+Deploy `dist/` to Vercel (SPA rewrite already in `vercel.json`).
 
-## Roles
+## Security
 
-- ADMIN: full access
-- CASHIER: POS, sales, customers, view inventory
-- STOREKEEPER: inventory, stock, purchases, suppliers
+- Never commit `.env` or passwords
+- Role checks are in `firestore.rules`
+- Cashier can create sales; cannot change cost prices without manager/admin product rights
 
-## Deployment
+## Single shop
 
-Vercel: connect repo, add VITE_FIREBASE_* env vars, build `npm run build`, output `dist`.
+This system is for **one shop only** — A.J Motorbike Spares & Accessories. No multi-branch mode.
