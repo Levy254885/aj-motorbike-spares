@@ -1,86 +1,67 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedIn() {
-      return request.auth != null;
-    }
-    function userDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-    function role() {
-      return userDoc().role;
-    }
-    function isAdmin() {
-      return isSignedIn() && role() == 'ADMIN';
-    }
-    function isCashier() {
-      return isSignedIn() && (role() == 'CASHIER' || role() == 'ADMIN');
-    }
-    function isStorekeeper() {
-      return isSignedIn() && (role() == 'STOREKEEPER' || role() == 'ADMIN');
-    }
+    function isSignedIn() { return request.auth != null; }
+    function userDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function role() { return userDoc().role; }
+    function isAdmin() { return isSignedIn() && role() == 'ADMIN'; }
+    function isManager() { return isSignedIn() && (role() == 'MANAGER' || role() == 'ADMIN'); }
+    function isCashier() { return isSignedIn() && (role() == 'CASHIER' || role() == 'ADMIN' || role() == 'MANAGER'); }
+    function isStorekeeper() { return isSignedIn() && (role() == 'STOREKEEPER' || role() == 'ADMIN' || role() == 'MANAGER'); }
 
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow write: if isAdmin();
     }
-
     match /products/{id} {
       allow read: if isSignedIn();
-      allow create, update: if isAdmin() || isStorekeeper();
+      allow create, update: if isManager() || isStorekeeper();
       allow delete: if isAdmin();
     }
-
     match /categories/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
-
     match /suppliers/{id} {
       allow read: if isSignedIn();
-      allow write: if isAdmin() || isStorekeeper();
+      allow write: if isManager() || isStorekeeper();
     }
-
     match /customers/{id} {
       allow read: if isSignedIn();
-      allow write: if isCashier() || isAdmin();
+      allow write: if isCashier();
     }
-
     match /sales/{id} {
-      allow read: if isCashier() || isAdmin();
-      allow create: if isCashier() || isAdmin();
+      allow read: if isCashier();
+      allow create: if isCashier();
       allow update: if isAdmin();
       allow delete: if false;
     }
-
     match /purchases/{id} {
-      allow read: if isStorekeeper() || isAdmin();
-      allow write: if isStorekeeper() || isAdmin();
+      allow read: if isStorekeeper() || isManager();
+      allow write: if isStorekeeper() || isManager();
     }
-
     match /stockMovements/{id} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
       allow update, delete: if false;
     }
-
     match /expenses/{id} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAdmin() || isManager();
     }
-
     match /notifications/{id} {
       allow read, write: if isSignedIn();
     }
-
     match /auditLogs/{id} {
       allow read: if isAdmin();
       allow create: if isSignedIn();
       allow update, delete: if false;
     }
-
     match /settings/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+    match /counters/{id} {
+      allow read, write: if isSignedIn();
     }
   }
 }
