@@ -1,0 +1,14 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /products/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['ADMIN', 'STOREKEEPER'];
+    }
+    match /{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+  }
+}

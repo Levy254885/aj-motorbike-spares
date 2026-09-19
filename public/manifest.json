@@ -1,0 +1,16 @@
+{
+  "name": "A.J Motorbike Spares",
+  "short_name": "AJ Spares",
+  "description": "Inventory and POS for A.J Motorbike Spares & Accessories",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#1a1a1a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
