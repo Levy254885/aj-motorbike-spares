@@ -10,17 +10,33 @@ function requireDb() {
   return db;
 }
 
+/** Firestore rejects undefined — only keep defined values */
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+
 export async function listProducts(opts?: { search?: string; status?: string; activeOnly?: boolean }) {
   const database = requireDb();
-  const q = query(collection(database, 'products'), where('active', '==', opts?.activeOnly !== false), orderBy('name'), limit(300));
+  const q = query(
+    collection(database, 'products'),
+    where('active', '==', opts?.activeOnly !== false),
+    orderBy('name'),
+    limit(300)
+  );
   const snap = await getDocs(q);
   let products = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Product));
   if (opts?.search?.trim()) {
     const s = opts.search.toLowerCase();
-    products = products.filter((p) =>
-      p.name.toLowerCase().includes(s) || p.sku.toLowerCase().includes(s) ||
-      (p.brand || '').toLowerCase().includes(s) ||
-      (p.compatibleModels || []).some((m) => m.toLowerCase().includes(s))
+    products = products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(s) ||
+        p.sku.toLowerCase().includes(s) ||
+        (p.brand || '').toLowerCase().includes(s) ||
+        (p.compatibleModels || []).some((m) => m.toLowerCase().includes(s))
     );
   }
   if (opts?.status) {
@@ -37,38 +53,84 @@ export async function getProduct(id: string): Promise<Product | null> {
 
 export async function createProduct(data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) {
   const database = requireDb();
-  const ref = await addDoc(collection(database, 'products'), {
-    ...data,
+  const now = new Date().toISOString();
+  const payload = stripUndefined({
+    name: data.name,
+    sku: data.sku,
+    categoryId: data.categoryId || 'Other',
+    categoryName: data.categoryName || data.categoryId || 'Other',
+    brand: data.brand || '',
     compatibleModels: data.compatibleModels || [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    description: data.description || '',
+    buyingPrice: Number(data.buyingPrice) || 0,
+    sellingPrice: Number(data.sellingPrice) || 0,
+    quantity: Number(data.quantity) || 0,
+    minimumStockLevel: Number(data.minimumStockLevel) || 0,
+    supplierId: data.supplierId || '',
+    supplierName: data.supplierName || '',
+    shelfLocation: data.shelfLocation || '',
+    imageUrl: data.imageUrl || '',
+    active: data.active !== false,
+    createdBy: data.createdBy,
+    createdAt: now,
+    updatedAt: now,
   });
-  if (data.quantity > 0) {
+
+  const ref = await addDoc(collection(database, 'products'), payload);
+
+  if ((Number(data.quantity) || 0) > 0) {
     await addDoc(collection(database, 'stockMovements'), {
-      productId: ref.id, productName: data.name, type: 'STOCK_RECEIVED',
-      quantity: data.quantity, previousQuantity: 0, newQuantity: data.quantity,
-      userId: data.createdBy, userName: '', reason: 'Opening stock',
-      createdAt: new Date().toISOString(),
+      productId: ref.id,
+      productName: data.name,
+      type: 'STOCK_RECEIVED',
+      quantity: Number(data.quantity) || 0,
+      previousQuantity: 0,
+      newQuantity: Number(data.quantity) || 0,
+      userId: data.createdBy || '',
+      userName: '',
+      reason: 'Opening stock',
+      createdAt: now,
     });
   }
   return ref.id;
 }
 
 export async function updateProduct(id: string, data: Partial<Product>) {
-  await updateDoc(doc(requireDb(), 'products', id), { ...data, updatedAt: new Date().toISOString() });
+  const payload = stripUndefined({
+    ...data,
+    updatedAt: new Date().toISOString(),
+  });
+  delete (payload as { id?: string }).id;
+  await updateDoc(doc(requireDb(), 'products', id), payload);
 }
 
-export async function adjustStock(productId: string, newQuantity: number, reason: string, userId: string, userName: string) {
+export async function adjustStock(
+  productId: string,
+  newQuantity: number,
+  reason: string,
+  userId: string,
+  userName: string
+) {
   const database = requireDb();
   const product = await getProduct(productId);
   if (!product) throw new Error('Product not found');
   const previous = product.quantity;
   const batch = writeBatch(database);
-  batch.update(doc(database, 'products', productId), { quantity: newQuantity, updatedAt: new Date().toISOString() });
+  batch.update(doc(database, 'products', productId), {
+    quantity: newQuantity,
+    updatedAt: new Date().toISOString(),
+  });
   batch.set(doc(collection(database, 'stockMovements')), {
-    productId, productName: product.name, type: 'STOCK_ADJUSTMENT',
-    quantity: Math.abs(newQuantity - previous), previousQuantity: previous, newQuantity,
-    userId, userName, reason, createdAt: new Date().toISOString(),
+    productId,
+    productName: product.name,
+    type: 'STOCK_ADJUSTMENT',
+    quantity: Math.abs(newQuantity - previous),
+    previousQuantity: previous,
+    newQuantity,
+    userId,
+    userName,
+    reason,
+    createdAt: new Date().toISOString(),
   });
   await batch.commit();
 }
@@ -77,11 +139,15 @@ export async function searchProductsPOS(term: string, max = 40): Promise<Product
   const products = await listProducts({ activeOnly: true });
   if (!term.trim()) return products.slice(0, max);
   const s = term.toLowerCase();
-  return products.filter((p) =>
-    p.name.toLowerCase().includes(s) || p.sku.toLowerCase().includes(s) ||
-    (p.brand || '').toLowerCase().includes(s) ||
-    (p.compatibleModels || []).some((m) => m.toLowerCase().includes(s))
-  ).slice(0, max);
+  return products
+    .filter(
+      (p) =>
+        p.name.toLowerCase().includes(s) ||
+        p.sku.toLowerCase().includes(s) ||
+        (p.brand || '').toLowerCase().includes(s) ||
+        (p.compatibleModels || []).some((m) => m.toLowerCase().includes(s))
+    )
+    .slice(0, max);
 }
 
 export async function getInventoryStats() {
@@ -94,5 +160,13 @@ export async function getInventoryStats() {
     if (p.quantity <= 0) outOfStock++;
     else if (p.quantity <= p.minimumStockLevel) lowStock++;
   }
-  return { totalProducts: products.length, totalUnits, costValue, retailValue, potentialProfit: retailValue - costValue, lowStock, outOfStock };
+  return {
+    totalProducts: products.length,
+    totalUnits,
+    costValue,
+    retailValue,
+    potentialProfit: retailValue - costValue,
+    lowStock,
+    outOfStock,
+  };
 }
