@@ -1,4 +1,4 @@
-export type UserRole = 'ADMIN' | 'CASHIER' | 'STOREKEEPER';
+export type UserRole = 'ADMIN' | 'MANAGER' | 'CASHIER' | 'STOREKEEPER';
 
 export interface AppUser {
   uid: string;

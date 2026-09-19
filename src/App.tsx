@@ -19,11 +19,16 @@ import UsersPage from './pages/UsersPage'
 import StockMovementsPage from './pages/StockMovementsPage'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 import LoadingScreen from './components/common/LoadingScreen'
+import ConfigMissingPage from './pages/ConfigMissingPage'
 
 export default function App() {
-  const { loading } = useAuth()
+  const { loading, firebaseReady } = useAuth()
 
   if (loading) return <LoadingScreen />
+
+  if (!firebaseReady) {
+    return <ConfigMissingPage />
+  }
 
   return (
     <Routes>
