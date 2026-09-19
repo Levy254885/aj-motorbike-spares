@@ -12,7 +12,7 @@ import {
   sendPasswordResetEmail,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, limit, query } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from '../lib/firebase';
 import type { AppUser, UserRole } from '../types';
 
@@ -33,6 +33,54 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/**
+ * If the login user has no row in Firestore "users", create one automatically.
+ * First user in the system becomes ADMIN. Shop owner email always ADMIN.
+ */
+async function ensureUserProfile(firebaseUser: User): Promise<AppUser> {
+  if (!db) throw new Error('Firestore is not configured');
+
+  const ref = doc(db, 'users', firebaseUser.uid);
+  const snap = await getDoc(ref);
+
+  if (snap.exists()) {
+    return { uid: firebaseUser.uid, ...snap.data() } as AppUser;
+  }
+
+  const email = (firebaseUser.email || '').toLowerCase();
+  let role: UserRole = 'ADMIN';
+
+  try {
+    const existing = await getDocs(query(collection(db, 'users'), limit(1)));
+    if (!existing.empty) {
+      // Later staff accounts default to CASHIER unless they are the shop owner email
+      role = email === 'levybatanga@gmail.com' ? 'ADMIN' : 'CASHIER';
+    }
+  } catch {
+    // If we cannot list users yet, still create this profile as ADMIN for single-shop setup
+    role = 'ADMIN';
+  }
+
+  if (email === 'levybatanga@gmail.com') {
+    role = 'ADMIN';
+  }
+
+  const now = new Date().toISOString();
+  const profile = {
+    email: firebaseUser.email || '',
+    displayName:
+      firebaseUser.displayName ||
+      (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'User'),
+    role,
+    active: true,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await setDoc(ref, profile);
+  return { uid: firebaseUser.uid, ...profile } as AppUser;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
@@ -49,14 +97,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(firebaseUser);
       if (firebaseUser && db) {
         try {
-          const snap = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (snap.exists()) {
-            setAppUser({ uid: firebaseUser.uid, ...snap.data() } as AppUser);
-          } else {
-            setAppUser(null);
-          }
+          const profile = await ensureUserProfile(firebaseUser);
+          setAppUser(profile);
         } catch (err) {
-          console.error('Failed to load user profile:', err);
+          console.error('Failed to load or create user profile:', err);
           setAppUser(null);
         }
       } else {

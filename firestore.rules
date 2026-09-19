@@ -1,18 +1,40 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedIn() { return request.auth != null; }
-    function userDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
-    function role() { return userDoc().role; }
-    function isAdmin() { return isSignedIn() && role() == 'ADMIN'; }
-    function isManager() { return isSignedIn() && (role() == 'MANAGER' || role() == 'ADMIN'); }
-    function isCashier() { return isSignedIn() && (role() == 'CASHIER' || role() == 'ADMIN' || role() == 'MANAGER'); }
-    function isStorekeeper() { return isSignedIn() && (role() == 'STOREKEEPER' || role() == 'ADMIN' || role() == 'MANAGER'); }
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function role() {
+      return userDoc().role;
+    }
+    function isAdmin() {
+      return isSignedIn() && userExists() && role() == 'ADMIN';
+    }
+    function isManager() {
+      return isSignedIn() && userExists() && (role() == 'MANAGER' || role() == 'ADMIN');
+    }
+    function isCashier() {
+      return isSignedIn() && userExists() && (role() == 'CASHIER' || role() == 'ADMIN' || role() == 'MANAGER');
+    }
+    function isStorekeeper() {
+      return isSignedIn() && userExists() && (role() == 'STOREKEEPER' || role() == 'ADMIN' || role() == 'MANAGER');
+    }
 
+    // Auto-create own profile on first login is allowed
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow write: if isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow delete: if isAdmin();
+      allow list: if isSignedIn();
     }
+
     match /products/{id} {
       allow read: if isSignedIn();
       allow create, update: if isManager() || isStorekeeper();
