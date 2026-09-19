@@ -11,7 +11,7 @@ function requireDb() {
 }
 
 /** Firestore rejects undefined — only keep defined values */
-function stripUndefined<T extends Record<string, unknown>>(obj: T): Record<string, unknown> {
+function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
     if (v !== undefined) out[k] = v;
@@ -97,11 +97,12 @@ export async function createProduct(data: Omit<Product, 'id' | 'createdAt' | 'up
 
 export async function updateProduct(id: string, data: Partial<Product>) {
   const payload = stripUndefined({
-    ...data,
+    ...(data as Record<string, unknown>),
     updatedAt: new Date().toISOString(),
   });
-  delete (payload as { id?: string }).id;
-  await updateDoc(doc(requireDb(), 'products', id), payload);
+  delete payload.id;
+  // Firestore UpdateData expects a typed document shape; cast after stripping undefined
+  await updateDoc(doc(requireDb(), 'products', id), payload as { [key: string]: string | number | boolean | string[] | null });
 }
 
 export async function adjustStock(
