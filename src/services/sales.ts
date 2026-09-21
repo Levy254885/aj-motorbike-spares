@@ -18,18 +18,6 @@ function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
-async function nextReceiptNumber(): Promise<string> {
-  const database = requireDb();
-  const counterRef = doc(database, 'counters', 'receipts');
-  const next = await runTransaction(database, async (tx) => {
-    const snap = await tx.get(counterRef);
-    const value = snap.exists() ? (snap.data().value || 0) + 1 : 1;
-    tx.set(counterRef, { value }, { merge: true });
-    return value;
-  });
-  return generateReceiptNumber(next);
-}
-
 export async function completeSale(params: {
   items: CartItem[];
   customerId?: string;
@@ -58,22 +46,50 @@ export async function completeSale(params: {
   } = params;
   if (!items.length) throw new Error('Cart is empty');
   const database = requireDb();
-  const receiptNumber = await nextReceiptNumber();
 
   return runTransaction(database, async (tx) => {
+    // --- ALL READS FIRST (Firestore rule) ---
+    const counterRef = doc(database, 'counters', 'receipts');
+    const counterSnap = await tx.get(counterRef);
+
+    // Deduplicate product reads if same product appears twice in cart
+    const uniqueIds = [...new Set(items.map((c) => c.product.id))];
+    const productSnaps = new Map<
+      string,
+      { ref: ReturnType<typeof doc>; product: Product }
+    >();
+
+    for (const id of uniqueIds) {
+      const productRef = doc(database, 'products', id);
+      const productSnap = await tx.get(productRef);
+      if (!productSnap.exists()) {
+        throw new Error(`Product not found (${id})`);
+      }
+      productSnaps.set(id, {
+        ref: productRef,
+        product: { id: productSnap.id, ...productSnap.data() } as Product,
+      });
+    }
+
+    // Validate stock (sum qty if same product multiple lines)
+    const qtyNeeded = new Map<string, number>();
+    for (const cart of items) {
+      qtyNeeded.set(cart.product.id, (qtyNeeded.get(cart.product.id) || 0) + cart.quantity);
+    }
+    for (const [id, needed] of qtyNeeded) {
+      const { product } = productSnaps.get(id)!;
+      if (product.active === false) throw new Error(`${product.name} is archived`);
+      if ((product.quantity || 0) < needed) {
+        throw new Error(`Insufficient stock for ${product.name}. Available: ${product.quantity}`);
+      }
+    }
+
+    // Build sale lines from live product prices
     const saleItems: SaleItem[] = [];
     let subtotal = 0;
     let totalCost = 0;
-
     for (const cart of items) {
-      const productRef = doc(database, 'products', cart.product.id);
-      const productSnap = await tx.get(productRef);
-      if (!productSnap.exists()) throw new Error(`Product ${cart.product.name} not found`);
-      const product = { id: productSnap.id, ...productSnap.data() } as Product;
-      if (product.active === false) throw new Error(`${product.name} is archived`);
-      if ((product.quantity || 0) < cart.quantity) {
-        throw new Error(`Insufficient stock for ${product.name}. Available: ${product.quantity}`);
-      }
+      const { product } = productSnaps.get(cart.product.id)!;
       const lineTotal = product.sellingPrice * cart.quantity;
       const lineCost = (product.buyingPrice || 0) * cart.quantity;
       saleItems.push({
@@ -88,25 +104,36 @@ export async function completeSale(params: {
       });
       subtotal += lineTotal;
       totalCost += lineCost;
-      const newQty = product.quantity - cart.quantity;
-      tx.update(productRef, { quantity: newQty, updatedAt: new Date().toISOString() });
+    }
+
+    const nextCounter = counterSnap.exists() ? (counterSnap.data().value || 0) + 1 : 1;
+    const receiptNumber = generateReceiptNumber(nextCounter);
+    const total = Math.max(0, subtotal - (discount || 0));
+    const now = new Date().toISOString();
+
+    // --- ALL WRITES AFTER READS ---
+    tx.set(counterRef, { value: nextCounter }, { merge: true });
+
+    for (const [id, needed] of qtyNeeded) {
+      const { ref, product } = productSnaps.get(id)!;
+      const newQty = (product.quantity || 0) - needed;
+      tx.update(ref, { quantity: newQty, updatedAt: now });
       tx.set(doc(collection(database, 'stockMovements')), {
         productId: product.id,
         productName: product.name,
         type: 'SALE',
-        quantity: cart.quantity,
-        previousQuantity: product.quantity,
+        quantity: needed,
+        previousQuantity: product.quantity || 0,
         newQuantity: newQty,
         userId: cashierId,
         userName: cashierName,
         reason: `Sale ${receiptNumber}`,
         referenceId: receiptNumber,
         referenceType: 'sale',
-        createdAt: new Date().toISOString(),
+        createdAt: now,
       });
     }
 
-    const total = Math.max(0, subtotal - (discount || 0));
     const saleData = stripUndefined({
       receiptNumber,
       customerId: customerId || '',
@@ -125,7 +152,7 @@ export async function completeSale(params: {
       cashierId,
       cashierName,
       status: 'COMPLETED',
-      createdAt: new Date().toISOString(),
+      createdAt: now,
     });
 
     const saleRef = doc(collection(database, 'sales'));
