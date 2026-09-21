@@ -10,6 +10,14 @@ function requireDb() {
   return db;
 }
 
+function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+
 async function nextReceiptNumber(): Promise<string> {
   const database = requireDb();
   const counterRef = doc(database, 'counters', 'receipts');
@@ -30,10 +38,24 @@ export async function completeSale(params: {
   paymentReference?: string;
   discount: number;
   notes?: string;
+  amountReceived?: number;
+  changeGiven?: number;
   cashierId: string;
   cashierName: string;
 }): Promise<Sale> {
-  const { items, customerId, customerName, paymentMethod, paymentReference, discount, notes, cashierId, cashierName } = params;
+  const {
+    items,
+    customerId,
+    customerName,
+    paymentMethod,
+    paymentReference,
+    discount,
+    notes,
+    amountReceived,
+    changeGiven,
+    cashierId,
+    cashierName,
+  } = params;
   if (!items.length) throw new Error('Cart is empty');
   const database = requireDb();
   const receiptNumber = await nextReceiptNumber();
@@ -48,37 +70,64 @@ export async function completeSale(params: {
       const productSnap = await tx.get(productRef);
       if (!productSnap.exists()) throw new Error(`Product ${cart.product.name} not found`);
       const product = { id: productSnap.id, ...productSnap.data() } as Product;
-      if (!product.active) throw new Error(`${product.name} is archived`);
-      if (product.quantity < cart.quantity) {
+      if (product.active === false) throw new Error(`${product.name} is archived`);
+      if ((product.quantity || 0) < cart.quantity) {
         throw new Error(`Insufficient stock for ${product.name}. Available: ${product.quantity}`);
       }
       const lineTotal = product.sellingPrice * cart.quantity;
       const lineCost = (product.buyingPrice || 0) * cart.quantity;
       saleItems.push({
-        productId: product.id, productName: product.name, sku: product.sku,
-        quantity: cart.quantity, unitPrice: product.sellingPrice, buyingPrice: product.buyingPrice || 0,
-        lineTotal, lineProfit: lineTotal - lineCost,
+        productId: product.id,
+        productName: product.name,
+        sku: product.sku,
+        quantity: cart.quantity,
+        unitPrice: product.sellingPrice,
+        buyingPrice: product.buyingPrice || 0,
+        lineTotal,
+        lineProfit: lineTotal - lineCost,
       });
       subtotal += lineTotal;
       totalCost += lineCost;
       const newQty = product.quantity - cart.quantity;
       tx.update(productRef, { quantity: newQty, updatedAt: new Date().toISOString() });
       tx.set(doc(collection(database, 'stockMovements')), {
-        productId: product.id, productName: product.name, type: 'SALE',
-        quantity: cart.quantity, previousQuantity: product.quantity, newQuantity: newQty,
-        userId: cashierId, userName: cashierName, reason: `Sale ${receiptNumber}`,
-        referenceId: receiptNumber, referenceType: 'sale', createdAt: new Date().toISOString(),
+        productId: product.id,
+        productName: product.name,
+        type: 'SALE',
+        quantity: cart.quantity,
+        previousQuantity: product.quantity,
+        newQuantity: newQty,
+        userId: cashierId,
+        userName: cashierName,
+        reason: `Sale ${receiptNumber}`,
+        referenceId: receiptNumber,
+        referenceType: 'sale',
+        createdAt: new Date().toISOString(),
       });
     }
 
     const total = Math.max(0, subtotal - (discount || 0));
-    const saleData: Omit<Sale, 'id'> = {
-      receiptNumber, customerId: customerId || undefined,
-      customerName: customerName || 'Walk-in Customer', items: saleItems,
-      subtotal, discount: discount || 0, tax: 0, total, profit: total - totalCost,
-      paymentMethod, paymentReference: paymentReference || undefined, notes: notes || undefined,
-      cashierId, cashierName, status: 'COMPLETED', createdAt: new Date().toISOString(),
-    };
+    const saleData = stripUndefined({
+      receiptNumber,
+      customerId: customerId || '',
+      customerName: customerName || 'Walk-in Customer',
+      items: saleItems,
+      subtotal,
+      discount: discount || 0,
+      tax: 0,
+      total,
+      profit: total - totalCost,
+      paymentMethod,
+      paymentReference: paymentReference || '',
+      notes: notes || '',
+      amountReceived: amountReceived ?? total,
+      changeGiven: changeGiven ?? 0,
+      cashierId,
+      cashierName,
+      status: 'COMPLETED',
+      createdAt: new Date().toISOString(),
+    });
+
     const saleRef = doc(collection(database, 'sales'));
     tx.set(saleRef, saleData);
     return { id: saleRef.id, ...saleData } as Sale;
