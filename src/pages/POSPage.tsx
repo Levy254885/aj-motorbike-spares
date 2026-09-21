@@ -6,6 +6,8 @@ import { formatCurrency, getStockStatus, stockStatusColor } from '../lib/utils';
 import type { CartItem, PaymentMethod, Product, Sale } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
+type SaleExtra = Sale & { amountReceived?: number; changeGiven?: number };
+
 export default function POSPage() {
   const { appUser } = useAuth();
   const [search, setSearch] = useState('');
@@ -15,11 +17,12 @@ export default function POSPage() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
-  const [completedSale, setCompletedSale] = useState<Sale | null>(null);
+  const [completedSale, setCompletedSale] = useState<SaleExtra | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [paymentRef, setPaymentRef] = useState('');
   const [customerName, setCustomerName] = useState('Walk-in Customer');
   const [discount, setDiscount] = useState(0);
+  const [amountReceived, setAmountReceived] = useState<number | ''>('');
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -69,24 +72,40 @@ export default function POSPage() {
       setError('Enter M-Pesa reference number');
       return;
     }
+    if (paymentMethod === 'CASH') {
+      const paid = Number(amountReceived);
+      if (!Number.isFinite(paid) || paid <= 0) {
+        setError('Enter the amount received from the customer');
+        return;
+      }
+      if (paid < total) {
+        setError(`Amount received is less than total. Short by ${formatCurrency(total - paid)}. Sale declined.`);
+        return;
+      }
+    }
     setProcessing(true);
     setError('');
     try {
+      const paid = paymentMethod === 'CASH' ? Number(amountReceived) : total;
+      const change = paymentMethod === 'CASH' ? Math.max(0, paid - total) : 0;
       const sale = await completeSale({
         items: cart,
         customerName: customerName.trim() || 'Walk-in Customer',
         paymentMethod,
-        paymentReference: paymentRef.trim() || undefined,
+        paymentReference: paymentRef.trim() || '',
         discount: discount || 0,
+        amountReceived: paid,
+        changeGiven: change,
         cashierId: appUser.uid,
         cashierName: appUser.displayName || appUser.email,
       });
-      setCompletedSale(sale);
+      setCompletedSale(sale as SaleExtra);
       setCart([]);
       setCheckoutOpen(false);
       setMobileCartOpen(false);
       setDiscount(0);
       setPaymentRef('');
+      setAmountReceived('');
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Checkout failed');
@@ -104,7 +123,7 @@ export default function POSPage() {
         </div>
         <div className="rounded-lg border border-zinc-200 bg-white p-4">
           <h2 className="text-center font-bold">A.J MOTORBIKE SPARES & ACCESSORIES</h2>
-          <p className="text-center text-xs text-zinc-500 mt-1">{completedSale.receiptNumber}</p>
+          <p className="mt-1 text-center text-xs text-zinc-500">{completedSale.receiptNumber}</p>
           <div className="mt-4 space-y-1 border-t pt-3 text-sm">
             {completedSale.items.map((item, i) => (
               <div key={i} className="flex justify-between gap-2">
@@ -120,8 +139,23 @@ export default function POSPage() {
             </div>
             <div className="flex justify-between text-zinc-600">
               <span>Payment</span>
-              <span>{completedSale.paymentMethod}{completedSale.paymentReference ? ` · ${completedSale.paymentReference}` : ''}</span>
+              <span>
+                {completedSale.paymentMethod}
+                {completedSale.paymentReference ? ` · ${completedSale.paymentReference}` : ''}
+              </span>
             </div>
+            {completedSale.amountReceived != null && (
+              <div className="flex justify-between text-zinc-600">
+                <span>Received</span>
+                <span className="tabular-nums">{formatCurrency(completedSale.amountReceived)}</span>
+              </div>
+            )}
+            {(completedSale.changeGiven || 0) > 0 && (
+              <div className="flex justify-between font-medium text-emerald-700">
+                <span>Change</span>
+                <span className="tabular-nums">{formatCurrency(completedSale.changeGiven || 0)}</span>
+              </div>
+            )}
           </div>
           <p className="mt-4 text-center text-xs text-zinc-500">Thank you for shopping with A.J Motorbike Spares.</p>
         </div>
@@ -137,7 +171,9 @@ export default function POSPage() {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-3 py-2">
         <h2 className="font-semibold">Cart ({itemCount})</h2>
-        {cart.length > 0 && <button type="button" onClick={() => setCart([])} className="text-xs text-red-600">Clear</button>}
+        {cart.length > 0 && (
+          <button type="button" onClick={() => setCart([])} className="text-xs text-red-600">Clear</button>
+        )}
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {cart.length === 0 ? (
@@ -147,7 +183,9 @@ export default function POSPage() {
             <div key={c.product.id} className="rounded-lg border p-2">
               <div className="flex justify-between gap-2">
                 <p className="line-clamp-2 text-sm font-medium">{c.product.name}</p>
-                <button type="button" onClick={() => updateQty(c.product.id, 0)}><Trash2 className="h-4 w-4 text-zinc-400" /></button>
+                <button type="button" onClick={() => updateQty(c.product.id, 0)}>
+                  <Trash2 className="h-4 w-4 text-zinc-400" />
+                </button>
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <div className="flex items-center gap-1">
@@ -166,10 +204,8 @@ export default function POSPage() {
           <span>Total</span>
           <span className="tabular-nums">{formatCurrency(total)}</span>
         </div>
-        <button type="button" disabled={!cart.length} onClick={() => { setError(''); setCheckoutOpen(true); }}
-          className="w-full rounded-lg bg-amber-500 py-2.5 text-sm font-semibold text-zinc-950 disabled:opacity-50">
-          Checkout
-        </button>
+        <button type="button" disabled={!cart.length} onClick={() => { setError(''); setAmountReceived(''); setCheckoutOpen(true); }}
+          className="w-full rounded-lg bg-amber-500 py-2.5 text-sm font-semibold text-zinc-950 disabled:opacity-50">Checkout</button>
       </div>
     </div>
   );
@@ -183,7 +219,9 @@ export default function POSPage() {
           <ShoppingCart className="h-4 w-4" /> {itemCount} · {formatCurrency(total)}
         </button>
       </div>
-      {error && !checkoutOpen && <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      {error && !checkoutOpen && (
+        <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+      )}
       <div className="flex min-h-0 flex-1 gap-4">
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="relative mb-3">
@@ -242,7 +280,7 @@ export default function POSPage() {
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">Payment</label>
-              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)} className="w-full rounded-lg border px-3 py-2 text-sm">
+              <select value={paymentMethod} onChange={(e) => { setPaymentMethod(e.target.value as PaymentMethod); setAmountReceived(''); setError(''); }} className="w-full rounded-lg border px-3 py-2 text-sm">
                 <option value="CASH">Cash</option>
                 <option value="MPESA">M-Pesa</option>
                 <option value="CARD">Card</option>
@@ -259,10 +297,30 @@ export default function POSPage() {
               <label className="mb-1 block text-xs font-medium text-zinc-600">Discount (KSh)</label>
               <input type="number" min={0} value={discount || ''} onChange={(e) => setDiscount(Number(e.target.value) || 0)} className="w-full rounded-lg border px-3 py-2 text-sm" />
             </div>
-            <div className="flex justify-between border-t pt-2 text-lg font-bold">
-              <span>Total</span>
+            <div className="flex justify-between border-t pt-2 text-base font-bold">
+              <span>Total due</span>
               <span className="tabular-nums">{formatCurrency(total)}</span>
             </div>
+            {paymentMethod === 'CASH' && (
+              <>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600">Amount received (KSh) *</label>
+                  <input type="number" min={0} value={amountReceived} onChange={(e) => setAmountReceived(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="Cash given by customer" className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" inputMode="numeric" />
+                </div>
+                {typeof amountReceived === 'number' && amountReceived > 0 && (
+                  amountReceived < total ? (
+                    <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                      Short by {formatCurrency(total - amountReceived)}. Sale will be declined.
+                    </p>
+                  ) : (
+                    <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                      Change to give customer: <strong>{formatCurrency(amountReceived - total)}</strong>
+                    </p>
+                  )
+                )}
+              </>
+            )}
             <button type="button" disabled={processing} onClick={handleCheckout}
               className="w-full rounded-lg bg-amber-500 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-60">
               {processing ? 'Processing…' : 'Complete sale'}
