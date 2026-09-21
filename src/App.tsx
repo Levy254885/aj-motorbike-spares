@@ -20,6 +20,8 @@ import StockMovementsPage from './pages/StockMovementsPage'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 import LoadingScreen from './components/common/LoadingScreen'
 import ConfigMissingPage from './pages/ConfigMissingPage'
+import InstallPrompt from './components/pwa/InstallPrompt'
+import SaleNotifications from './components/pwa/SaleNotifications'
 
 export default function App() {
   const { loading, firebaseReady } = useAuth()
@@ -37,7 +39,11 @@ export default function App() {
         path="/"
         element={
           <ProtectedRoute>
-            <DashboardLayout />
+            <>
+              <SaleNotifications />
+              <InstallPrompt />
+              <DashboardLayout />
+            </>
           </ProtectedRoute>
         }
       >
@@ -55,8 +61,8 @@ export default function App() {
         <Route path="customers" element={<CustomersPage />} />
         <Route path="expenses" element={<ExpensesPage />} />
         <Route path="reports" element={<ReportsPage />} />
-        <Route path="settings" element={<SettingsPage />} />
         <Route path="users" element={<UsersPage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
