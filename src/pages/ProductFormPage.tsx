@@ -4,8 +4,7 @@ import { createProduct, getProduct, updateProduct } from '../services/products';
 import { formatCurrency, profitMargin } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
-const CATEGORIES = ['Engine Parts','Brake System','Electrical','Suspension','Chains & Sprockets','Cables','Bearings','Tyres','Tubes','Body Parts','Fuel System','Clutch','Filters','Lubricants','Accessories','Helmets','Lighting','Mirrors','Other'];
-const BRANDS = ['Bajaj','TVS','Honda','Yamaha','Boxer','Generic','Other'];
+const CATEGORIES = ['Engine Parts','Brake System','Electrical','Suspension','Chains & Sprockets','Cables','Bearings','Tyres','Tubes','Body Parts','Fuel System','Clutch','Filters','Lubricants','Accessories','Other'];
 
 export default function ProductFormPage() {
   const { id } = useParams();
@@ -15,7 +14,7 @@ export default function ProductFormPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({
-    name: '', sku: '', categoryId: 'Other', brand: 'Generic', compatibleModels: '',
+    name: '', sku: '', categoryId: '', brand: '', compatibleModels: '',
     description: '', buyingPrice: 0, sellingPrice: 0, quantity: 0, minimumStockLevel: 5, shelfLocation: '',
   });
 
@@ -24,7 +23,7 @@ export default function ProductFormPage() {
     getProduct(id).then((p) => {
       if (!p) return;
       setForm({
-        name: p.name, sku: p.sku, categoryId: p.categoryId || 'Other', brand: p.brand || 'Generic',
+        name: p.name, sku: p.sku, categoryId: p.categoryId || '', brand: p.brand || '',
         compatibleModels: (p.compatibleModels || []).join(', '), description: p.description || '',
         buyingPrice: p.buyingPrice, sellingPrice: p.sellingPrice, quantity: p.quantity,
         minimumStockLevel: p.minimumStockLevel, shelfLocation: p.shelfLocation || '',
@@ -41,9 +40,9 @@ export default function ProductFormPage() {
       const payload = {
         name: form.name.trim(),
         sku: form.sku.trim().toUpperCase(),
-        categoryId: form.categoryId,
-        categoryName: form.categoryId,
-        brand: form.brand,
+        categoryId: form.categoryId.trim(),
+        categoryName: form.categoryId.trim(),
+        brand: form.brand.trim(),
         compatibleModels: form.compatibleModels.split(',').map((s) => s.trim()).filter(Boolean),
         description: form.description.trim() || undefined,
         buyingPrice: Number(form.buyingPrice) || 0,
@@ -55,6 +54,8 @@ export default function ProductFormPage() {
         createdBy: appUser.uid,
       };
       if (!payload.name || !payload.sku) throw new Error('Name and SKU are required');
+      if (!payload.brand) throw new Error('Brand is required');
+      if (!payload.categoryId) throw new Error('Category is required');
       if (isEdit && id) {
         const { quantity: _q, createdBy: _c, ...rest } = payload;
         await updateProduct(id, rest);
@@ -81,49 +82,63 @@ export default function ProductFormPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="mb-1 block text-xs font-medium text-zinc-600">Product name *</label>
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Brake Pad — Boxer 125" />
+            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Brake Pad — Boxer 100cc" />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-600">SKU *</label>
             <input required value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="w-full rounded-lg border px-3 py-2 font-mono text-sm" placeholder="AJ-BRK-001" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-600">Category</label>
-            <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm">
-              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <label className="mb-1 block text-xs font-medium text-zinc-600">Category *</label>
+            <input 
+              required 
+              type="text"
+              value={form.categoryId} 
+              onChange={(e) => setForm({ ...form, categoryId: e.target.value })} 
+              className="w-full rounded-lg border px-3 py-2 text-sm" 
+              placeholder="Type category (e.g., Engine Parts, Brake System)" 
+              list="categories-list"
+            />
+            <datalist id="categories-list">
+              {CATEGORIES.map((c) => <option key={c} value={c} />)}
+            </datalist>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-600">Brand</label>
-            <select value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm">
-              {BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
+            <label className="mb-1 block text-xs font-medium text-zinc-600">Brand *</label>
+            <input 
+              required
+              type="text"
+              value={form.brand} 
+              onChange={(e) => setForm({ ...form, brand: e.target.value })} 
+              className="w-full rounded-lg border px-3 py-2 text-sm" 
+              placeholder="Type brand name (e.g., Bajaj, Honda, Custom Brand)" 
+            />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-600">Shelf / location</label>
-            <input value={form.shelfLocation} onChange={(e) => setForm({ ...form, shelfLocation: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" />
+            <input value={form.shelfLocation} onChange={(e) => setForm({ ...form, shelfLocation: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="A1, B3, Shelf 5" />
           </div>
           <div className="sm:col-span-2">
             <label className="mb-1 block text-xs font-medium text-zinc-600">Compatible motorcycles (comma-separated)</label>
-            <input value={form.compatibleModels} onChange={(e) => setForm({ ...form, compatibleModels: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Boxer 100, Boxer 125" />
+            <input value={form.compatibleModels} onChange={(e) => setForm({ ...form, compatibleModels: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Boxer 100, Boxer 150, TVS Apache" />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-600">Cost (KSh)</label>
-            <input type="number" min={0} value={form.buyingPrice || ''} onChange={(e) => setForm({ ...form, buyingPrice: Number(e.target.value) })} className="w-full rounded-lg border px-3 py-2 text-sm" />
+            <input type="number" min={0} value={form.buyingPrice || ''} onChange={(e) => setForm({ ...form, buyingPrice: Number(e.target.value) })} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="0" />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-600">Selling (KSh)</label>
-            <input type="number" min={0} value={form.sellingPrice || ''} onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) })} className="w-full rounded-lg border px-3 py-2 text-sm" />
+            <input type="number" min={0} value={form.sellingPrice || ''} onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) })} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="0" />
           </div>
           {!isEdit && (
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">Opening quantity</label>
-              <input type="number" min={0} value={form.quantity || ''} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} className="w-full rounded-lg border px-3 py-2 text-sm" />
+              <input type="number" min={0} value={form.quantity || ''} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="0" />
             </div>
           )}
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-600">Minimum stock</label>
-            <input type="number" min={0} value={form.minimumStockLevel || ''} onChange={(e) => setForm({ ...form, minimumStockLevel: Number(e.target.value) })} className="w-full rounded-lg border px-3 py-2 text-sm" />
+            <input type="number" min={0} value={form.minimumStockLevel || ''} onChange={(e) => setForm({ ...form, minimumStockLevel: Number(e.target.value) })} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="5" />
           </div>
         </div>
         <div className="rounded-lg bg-zinc-50 px-3 py-2 text-sm">
