@@ -18,6 +18,7 @@ import SettingsPage from './pages/SettingsPage'
 import UsersPage from './pages/UsersPage'
 import StockMovementsPage from './pages/StockMovementsPage'
 import ProtectedRoute from './components/layout/ProtectedRoute'
+import PasswordProtection from './components/layout/PasswordProtection'
 import LoadingScreen from './components/common/LoadingScreen'
 import ConfigMissingPage from './pages/ConfigMissingPage'
 import InstallPrompt from './components/pwa/InstallPrompt'
@@ -47,22 +48,23 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<DashboardPage />} />
-        <Route path="inventory" element={<InventoryPage />} />
-        <Route path="inventory/new" element={<ProductFormPage />} />
-        <Route path="inventory/:id" element={<ProductDetailPage />} />
-        <Route path="inventory/:id/edit" element={<ProductFormPage />} />
-        <Route path="stock-movements" element={<StockMovementsPage />} />
+        <Route index element={<PasswordProtection><DashboardPage /></PasswordProtection>} />
         <Route path="pos" element={<POSPage />} />
         <Route path="sales" element={<SalesPage />} />
         <Route path="sales/:id" element={<SaleDetailPage />} />
-        <Route path="purchases" element={<PurchasesPage />} />
-        <Route path="suppliers" element={<SuppliersPage />} />
-        <Route path="customers" element={<CustomersPage />} />
-        <Route path="expenses" element={<ExpensesPage />} />
-        <Route path="reports" element={<ReportsPage />} />
-        <Route path="users" element={<UsersPage />} />
+        <Route path="stock-movements" element={<StockMovementsPage />} />
         <Route path="settings" element={<SettingsPage />} />
+
+        <Route path="inventory" element={<PasswordProtection><InventoryPage /></PasswordProtection>} />
+        <Route path="inventory/new" element={<PasswordProtection><ProductFormPage /></PasswordProtection>} />
+        <Route path="inventory/:id" element={<PasswordProtection><ProductDetailPage /></PasswordProtection>} />
+        <Route path="inventory/:id/edit" element={<PasswordProtection><ProductFormPage /></PasswordProtection>} />
+        <Route path="purchases" element={<PasswordProtection><PurchasesPage /></PasswordProtection>} />
+        <Route path="suppliers" element={<PasswordProtection><SuppliersPage /></PasswordProtection>} />
+        <Route path="customers" element={<PasswordProtection><CustomersPage /></PasswordProtection>} />
+        <Route path="expenses" element={<PasswordProtection><ExpensesPage /></PasswordProtection>} />
+        <Route path="reports" element={<PasswordProtection><ReportsPage /></PasswordProtection>} />
+        <Route path="users" element={<PasswordProtection><UsersPage /></PasswordProtection>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
