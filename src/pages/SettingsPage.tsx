@@ -25,10 +25,17 @@ export default function SettingsPage() {
       (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
     setInstalled(standalone);
 
+    // Check if prompt was already captured
+    if (window.__ajDeferredInstall) {
+      setDeferredPrompt(window.__ajDeferredInstall);
+      setCanPrompt(true);
+    }
+
     // Capture the beforeinstallprompt event
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       const event = e as BeforeInstallPromptEvent;
+      window.__ajDeferredInstall = event;
       setDeferredPrompt(event);
       setCanPrompt(true);
     };
@@ -86,4 +93,26 @@ export default function SettingsPage() {
       </div>
 
       {/* Install App Button */}
-      {!installed && canPrompt && (\n        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">\n          <button\n            type="button"\n            onClick={handleInstall}\n            disabled={installing}\n            className="w-full flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-3 text-sm font-semibold text-zinc-950 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"\n          >\n            <Download className="h-5 w-5" />\n            {installing ? 'Installing…' : 'Install App'}\n          </button>\n        </div>\n      )}\n\n      {/* Installed Status */}\n      {installed && (\n        <div className="rounded-lg border border-green-200 bg-green-50 p-4">\n          <p className="text-center text-sm font-semibold text-green-700\">✓ App installed successfully</p>\n        </div>\n      )}\n    </div>\n  );\n}\n
+      {!installed && canPrompt && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <button
+            type="button"
+            onClick={handleInstall}
+            disabled={installing}
+            className="w-full flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-3 text-sm font-semibold text-zinc-950 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+          >
+            <Download className="h-5 w-5" />
+            {installing ? 'Installing…' : 'Install App'}
+          </button>
+        </div>
+      )}
+
+      {/* Installed Status */}
+      {installed && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+          <p className="text-center text-sm font-semibold text-green-700">✓ App installed successfully</p>
+        </div>
+      )}
+    </div>
+  );
+}
