@@ -4,16 +4,37 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import App from './App';
 import './index.css';
+import { initOfflineDb } from './lib/offlineDb';
+import { initSyncManager } from './lib/syncManager';
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </BrowserRouter>
-  </StrictMode>
-);
+// Initialize offline storage and sync manager immediately
+async function initializeApp() {
+  try {
+    console.log('[App] Initializing offline storage...');
+    await initOfflineDb();
+    console.log('[App] Offline storage ready');
+
+    console.log('[App] Initializing sync manager...');
+    initSyncManager({ maxRetries: 5, retryDelayMs: 3000 });
+    console.log('[App] Sync manager ready');
+  } catch (err) {
+    console.error('[App] Initialization error:', err);
+  }
+
+  // Render React app
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <BrowserRouter>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </BrowserRouter>
+    </StrictMode>
+  );
+}
+
+// Start app initialization
+initializeApp();
 
 // Register service worker for PWA offline support
 if ('serviceWorker' in navigator) {
