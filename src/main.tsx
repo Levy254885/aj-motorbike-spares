@@ -15,10 +15,29 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>
 );
 
+// Register service worker for PWA offline support
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.warn('SW registration failed', err);
-    });
+    navigator.serviceWorker
+      .register('/sw.js', { scope: '/' })
+      .then((reg) => {
+        console.log('[PWA] Service Worker registered successfully', reg);
+        // Check for updates periodically
+        setInterval(() => {
+          reg.update();
+        }, 60000); // Check every minute
+      })
+      .catch((err) => {
+        console.error('[PWA] Service Worker registration failed:', err);
+      });
   });
 }
+
+// Log when app is installed
+window.addEventListener('beforeinstallprompt', (e) => {
+  console.log('[PWA] Install prompt available');
+});
+
+window.addEventListener('appinstalled', () => {
+  console.log('[PWA] App installed successfully');
+});

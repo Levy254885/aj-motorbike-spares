@@ -1,37 +1,87 @@
-/* A.J Motorbike Spares service worker */
+/* A.J Motorbike Spares service worker - Enhanced offline support */
 const CACHE = 'aj-spares-v1';
 const PRECACHE = ['/', '/index.html', '/manifest.json', '/favicon.svg'];
 
 self.addEventListener('install', (event) => {
+  console.log('[SW] Installing service worker...');
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
+    caches.open(CACHE).then((cache) => {
+      console.log('[SW] Pre-caching assets');
+      return cache.addAll(PRECACHE);
+    }).then(() => {
+      console.log('[SW] Service worker activated');
+      self.skipWaiting();
+    })
   );
 });
 
 self.addEventListener('activate', (event) => {
+  console.log('[SW] Activating service worker...');
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys().then((keys) => {
+      console.log('[SW] Found caches:', keys);
+      return Promise.all(
+        keys
+          .filter((k) => k !== CACHE)
+          .map((k) => {
+            console.log('[SW] Deleting old cache:', k);
+            return caches.delete(k);
+          })
+      );
+    }).then(() => {
+      console.log('[SW] Claiming clients');
+      return self.clients.claim();
+    })
   );
 });
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
-  if (request.url.includes('firestore.googleapis.com') || request.url.includes('googleapis.com')) {
+
+  const url = new URL(request.url);
+
+  // Firebase API calls - network first with offline fallback
+  if (url.hostname.includes('firebaseio.com') || url.hostname.includes('firebaseapp.com')) {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          // Cache successful responses for offline fallback
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy));
+          }
+          return res;
+        })
+        .catch(() => {
+          // Return cached data if available, else offline message
+          return caches.match(request).then((cached) => {
+            if (cached) return cached;
+            return new Response('Offline - Data not cached', { status: 503 });
+          });
+        })
+    );
     return;
   }
+
+  // Static assets - network first, cache fallback
   event.respondWith(
     fetch(request)
       .then((res) => {
-        const copy = res.clone();
+        // Cache successful responses
         if (res.ok && request.url.startsWith(self.location.origin)) {
+          const copy = res.clone();
           caches.open(CACHE).then((cache) => cache.put(request, copy));
         }
         return res;
       })
-      .catch(() => caches.match(request).then((r) => r || caches.match('/')))
+      .catch(() => {
+        // Try cache, then home page fallback
+        return caches.match(request).then((cached) => {
+          if (cached) return cached;
+          return caches.match('/').then((home) => home || new Response('Offline - Page not cached', { status: 503 }));
+        });
+      })
   );
 });
 
