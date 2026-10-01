@@ -63,32 +63,19 @@
       "main": "dist/main/main.js"
     },
     "npmRebuild": true,
-    "nodeGypRebuild": false,
     "win": {
       "target": [
-        {
-          "target": "nsis",
-          "arch": ["x64"]
-        },
-        {
-          "target": "portable",
-          "arch": ["x64"]
-        }
+        "nsis",
+        "portable"
       ],
-      "icon": "build/icon.ico",
-      "artifactName": "AJ-Motorbike-Spares-Setup-${version}.${ext}",
-      "publisherName": "AJ Motorbike Spares"
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,
-      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "AJ Motorbike Spares",
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico",
       "deleteAppDataOnUninstall": false,
       "artifactName": "AJ-Motorbike-Spares-Setup-${version}.${ext}"
     },
@@ -96,12 +83,18 @@
       "artifactName": "AJ-Motorbike-Spares-Portable-${version}.${ext}"
     },
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.business",
       "icon": "build/icon.png"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Office",
       "icon": "build/icon.png",
       "artifactName": "AJ-Motorbike-Spares-${version}.${ext}"
