@@ -12,9 +12,10 @@
     "build:main": "tsc -p tsconfig.electron.json",
     "build": "npm run typecheck && npm run build:renderer && npm run build:main",
     "postinstall": "electron-builder install-app-deps",
-    "dist": "npm run build && electron-builder --win",
-    "dist:dir": "npm run build && electron-builder --win --dir",
-    "dist:linux": "npm run build && electron-builder --linux",
+    "icons": "node scripts/generate-icons.mjs",
+    "dist": "npm run icons && npm run build && electron-builder --win",
+    "dist:dir": "npm run icons && npm run build && electron-builder --win --dir",
+    "dist:linux": "npm run icons && npm run build && electron-builder --linux",
     "seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
