@@ -6,10 +6,15 @@
   "author": "AJ Motorbike Spares",
   "license": "MIT",
   "scripts": {
-    "dev": "npm run build && concurrently -k \"vite --host 127.0.0.1\" \"wait-on tcp:127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 tsx scripts/start-electron.ts\"",
+    "dev": "npm run build:main && concurrently -k \"vite --host 127.0.0.1\" \"wait-on tcp:127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 tsx scripts/start-electron.ts\"",
     "typecheck": "tsc --noEmit",
-    "build": "npm run typecheck && vite build && tsc -p tsconfig.electron.json",
-    "dist": "npm run build && electron-builder",
+    "build:renderer": "vite build",
+    "build:main": "tsc -p tsconfig.electron.json",
+    "build": "npm run typecheck && npm run build:renderer && npm run build:main",
+    "postinstall": "electron-builder install-app-deps",
+    "dist": "npm run build && electron-builder --win",
+    "dist:dir": "npm run build && electron-builder --win --dir",
+    "dist:linux": "npm run build && electron-builder --linux",
     "seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
@@ -39,41 +44,66 @@
   "build": {
     "appId": "com.ajmotorbikespares.desktop",
     "productName": "AJ Motorbike Spares",
+    "copyright": "Copyright © AJ Motorbike Spares",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "dist/**/*",
       "package.json"
     ],
+    "asar": true,
     "asarUnpack": [
-      "**/*.node"
+      "**/*.node",
+      "**/better-sqlite3/**"
     ],
+    "extraMetadata": {
+      "main": "dist/main/main.js"
+    },
+    "npmRebuild": true,
+    "nodeGypRebuild": false,
     "win": {
       "target": [
-        "nsis"
-      ]
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "AJ-Motorbike-Spares-Setup-${version}.${ext}",
+      "publisherName": "AJ Motorbike Spares"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "AJ Motorbike Spares"
+      "shortcutName": "AJ Motorbike Spares",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "AJ-Motorbike-Spares-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "AJ-Motorbike-Spares-Portable-${version}.${ext}"
     },
     "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "category": "public.app-category.business"
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.business",
+      "icon": "build/icon.png"
     },
     "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Office"
+      "target": ["AppImage", "deb"],
+      "category": "Office",
+      "icon": "build/icon.png",
+      "artifactName": "AJ-Motorbike-Spares-${version}.${ext}"
     }
   }
 }
