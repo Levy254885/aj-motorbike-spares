@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ArchiveRestore,
@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   LogOut,
   PackagePlus,
-  Printer,
   RotateCcw,
   Settings as SettingsIcon,
   ShoppingCart,
@@ -15,7 +14,9 @@ import {
   Users,
   UserCircle
 } from 'lucide-react';
-import type { CartItem, Category, Customer, Product, ReportRow, SessionUser, Settings } from '../shared/types';
+import type { Category, Product, ReportRow, SessionUser, Settings } from '../shared/types';
+import { money, formatCell, errorMessage, normalizeProduct } from './helpers';
+import { Sales } from './pages/Sales';
 import './styles/app.css';
 
 type View =
@@ -45,40 +46,6 @@ const nav = [
   { id: 'backup', label: 'Backup', icon: ArchiveRestore, admin: true }
 ] as const;
 
-function money(value: number, currency = 'KES') {
-  const normalized = (currency || 'KES').trim().toUpperCase();
-  const amount = Number(value).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (normalized === 'KES' || normalized === 'KSH') return `KES ${amount}`;
-  return `${currency} ${amount}`;
-}
-
-function formatCell(header: string, value: unknown, currency = 'KES') {
-  if (value == null) return '';
-  const isCurrency = /(sale|total|price|amount|discount|tax|profit|paid|change|refund|cash|grand|value)/i.test(header);
-  if (isCurrency && typeof value === 'number') return money(value, currency);
-  return String(value);
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function normalizeProduct(row: any) {
-  return {
-    ...row,
-    categoryId: row.categoryId ? Number(row.categoryId) : null,
-    purchasePrice: Number(row.purchasePrice || 0),
-    sellingPrice: Number(row.sellingPrice || 0),
-    stockQuantity: Number(row.stockQuantity || 0),
-    lowStockThreshold: Number(row.lowStockThreshold || 0),
-    active: Number(row.active ?? 1)
-  };
-}
-
-function confirmDelete(message: string) {
-  return window.confirm(message);
-}
-
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="stat">
@@ -96,8 +63,8 @@ function Table({ rows, action, currency }: { rows: any[]; action?: (row: any) =>
       <table>
         <thead>
           <tr>
-            {headers.map((header) => (
-              <th key={header}>{header}</th>
+            {headers.map((h) => (
+              <th key={h}>{h}</th>
             ))}
             {action && <th />}
           </tr>
@@ -105,8 +72,8 @@ function Table({ rows, action, currency }: { rows: any[]; action?: (row: any) =>
         <tbody>
           {rows.map((row, index) => (
             <tr key={row.id || index}>
-              {headers.map((header) => (
-                <td key={header}>{formatCell(header, row[header], currency)}</td>
+              {headers.map((h) => (
+                <td key={h}>{formatCell(h, row[h], currency)}</td>
               ))}
               {action && <td className="actions">{action(row)}</td>}
             </tr>
@@ -198,9 +165,157 @@ function Dashboard() {
   );
 }
 
-/* NOTE: Full POS, Products, Inventory, Customers, Returns, Reports, Settings, Users, Backup screens
-   are in the complete local build at /home/workdir/artifacts/aj-motorbike-spares/src/renderer/main.tsx
-   This deployable core provides Login + Dashboard; run the full local file for complete UI. */
+function Products({ user, notify }: { user: SessionUser; notify: (m: string) => void }) {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [editing, setEditing] = useState<any>({});
+  const refresh = () =>
+    Promise.all([window.aj.listProducts('', true).then(setProducts), window.aj.listCategories().then(setCategories)]);
+  useEffect(() => {
+    void refresh();
+  }, []);
+  async function save() {
+    try {
+      await window.aj.saveProduct(normalizeProduct(editing), user.id);
+      setEditing({});
+      await refresh();
+      notify('Product saved.');
+    } catch (error) {
+      notify(errorMessage(error));
+    }
+  }
+  return (
+    <section>
+      <div className="panel form-grid">
+        <label>Name<input value={editing.name || ''} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></label>
+        <label>SKU<input value={editing.sku || ''} onChange={(e) => setEditing({ ...editing, sku: e.target.value })} /></label>
+        <label>Barcode<input value={editing.barcode || ''} onChange={(e) => setEditing({ ...editing, barcode: e.target.value })} /></label>
+        <label>
+          Category
+          <select value={editing.categoryId ?? ''} onChange={(e) => setEditing({ ...editing, categoryId: e.target.value ? Number(e.target.value) : null })}>
+            <option value="">None</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </label>
+        <label>Buy price<input type="number" value={editing.purchasePrice ?? 0} onChange={(e) => setEditing({ ...editing, purchasePrice: Number(e.target.value) })} /></label>
+        <label>Sell price<input type="number" value={editing.sellingPrice ?? 0} onChange={(e) => setEditing({ ...editing, sellingPrice: Number(e.target.value) })} /></label>
+        <label>Stock<input type="number" value={editing.stockQuantity ?? 0} onChange={(e) => setEditing({ ...editing, stockQuantity: Number(e.target.value) })} /></label>
+        <label>Low threshold<input type="number" value={editing.lowStockThreshold ?? 5} onChange={(e) => setEditing({ ...editing, lowStockThreshold: Number(e.target.value) })} /></label>
+        <button className="primary" onClick={save}>Save product</button>
+      </div>
+      <div className="panel">
+        <Table rows={products} action={(row) => <button onClick={() => setEditing(row)}>Edit</button>} />
+      </div>
+    </section>
+  );
+}
+
+function Inventory({ user, notify }: { user: SessionUser; notify: (m: string) => void }) {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
+  const [form, setForm] = useState({ productId: 0, type: 'stock_in', quantity: 1, reason: 'Manual adjustment' });
+  const refresh = () => Promise.all([window.aj.listProducts('', true).then(setProducts), window.aj.inventoryHistory().then(setHistory)]);
+  useEffect(() => { void refresh(); }, []);
+  async function save() {
+    try {
+      await window.aj.adjustStock({ ...form, productId: Number(form.productId), quantity: Number(form.quantity) }, user.id);
+      await refresh();
+      notify('Stock updated.');
+    } catch (error) {
+      notify(errorMessage(error));
+    }
+  }
+  return (
+    <section>
+      <div className="panel form-grid">
+        <select value={form.productId} onChange={(e) => setForm({ ...form, productId: Number(e.target.value) })}>
+          <option value={0}>Select product</option>
+          {products.map((p) => (
+            <option key={p.id} value={p.id}>{p.name} (stock {p.stockQuantity})</option>
+          ))}
+        </select>
+        <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+          <option value="stock_in">Stock in</option>
+          <option value="stock_out">Stock out</option>
+          <option value="adjustment">Set stock</option>
+        </select>
+        <input type="number" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} />
+        <input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+        <button className="primary" onClick={save}>Apply</button>
+      </div>
+      <div className="panel"><h2>Stock history</h2><Table rows={history} /></div>
+    </section>
+  );
+}
+
+function Reports() {
+  const today = new Date().toISOString().slice(0, 10);
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(today);
+  const [rows, setRows] = useState<ReportRow[]>([]);
+  const [title, setTitle] = useState('Daily sales report');
+  const [settings, setSettings] = useState<Settings | null>(null);
+  useEffect(() => { void window.aj.getSettings().then(setSettings); }, []);
+  async function run(kind: string) {
+    const map: Record<string, () => Promise<ReportRow[]>> = {
+      sales: () => window.aj.salesReport(from, to),
+      products: () => window.aj.productSalesReport(from, to),
+      cashiers: () => window.aj.cashierReport(from, to),
+      profit: () => window.aj.profitReport(from, to),
+      inventory: () => window.aj.inventoryReport(false),
+      low: () => window.aj.inventoryReport(true)
+    };
+    setTitle(kind);
+    setRows(await map[kind]());
+  }
+  return (
+    <section>
+      <div className="panel toolbar">
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        {['sales', 'products', 'cashiers', 'profit', 'inventory', 'low'].map((kind) => (
+          <button key={kind} onClick={() => run(kind)}>{kind}</button>
+        ))}
+        <button onClick={() => window.aj.saveCsv(rows)}>CSV</button>
+        <button onClick={() => window.aj.savePdf(title, rows)}>PDF</button>
+      </div>
+      <div className="panel"><h2>{title}</h2><Table rows={rows} currency={settings?.currency} /></div>
+    </section>
+  );
+}
+
+function Backup({ user, notify }: { user: SessionUser; notify: (m: string) => void }) {
+  async function doBackup() {
+    try {
+      const path = await window.aj.createBackup();
+      notify(`Backup saved: ${path}`);
+    } catch (error) {
+      notify(errorMessage(error));
+    }
+  }
+  async function doRestore() {
+    if (!window.confirm('Restore will overwrite the current database. Continue?')) return;
+    try {
+      const path = await window.aj.restoreBackup(user.id);
+      if (path) notify(`Restored from ${path}. Restart the app if needed.`);
+    } catch (error) {
+      notify(errorMessage(error));
+    }
+  }
+  return (
+    <section className="panel">
+      <h2>Database backup & restore</h2>
+      <p className="hint">All data is stored locally in SQLite. Keep regular backups.</p>
+      <div className="action-list">
+        <button className="primary" onClick={doBackup}>Create backup</button>
+        <button onClick={async () => { const p = await window.aj.exportDatabase(); if (p) notify(`Exported to ${p}`); }}>Export database</button>
+        <button className="danger" onClick={doRestore}>Restore backup</button>
+      </div>
+    </section>
+  );
+}
 
 function App() {
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -238,18 +353,18 @@ function App() {
         <header className="topbar">
           <div>
             <h1>{nav.find((item) => item.id === view)?.label}</h1>
-            <p>
-              {user.fullName} · {user.role}
-            </p>
+            <p>{user.fullName} · {user.role}</p>
           </div>
         </header>
         {view === 'dashboard' && <Dashboard />}
-        {view !== 'dashboard' && (
+        {view === 'sales' && <Sales user={user} notify={notify} />}
+        {view === 'products' && <Products user={user} notify={notify} />}
+        {view === 'inventory' && <Inventory user={user} notify={notify} />}
+        {view === 'reports' && <Reports />}
+        {view === 'backup' && <Backup user={user} notify={notify} />}
+        {(view === 'categories' || view === 'customers' || view === 'returns' || view === 'settings' || view === 'users') && (
           <div className="panel">
-            <p className="hint">
-              Screen ready. Full POS/Products/Inventory/Reports UI is in the complete local source
-              (main.tsx). Backend IPC for all features is live.
-            </p>
+            <p className="hint">Backend APIs for {view} are live. Extended forms available in local full source.</p>
           </div>
         )}
       </main>
