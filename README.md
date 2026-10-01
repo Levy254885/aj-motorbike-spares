@@ -51,13 +51,29 @@ npm run dev
 npm run build
 ```
 
-## Windows installer
+## Windows installer (shop PC)
+
+**Build on a Windows x64 machine** (recommended):
 
 ```bash
+npm install
 npm run dist
 ```
 
-Output is under `release/`. On Windows this produces an NSIS installer (e.g. `AJ Motorbike Spares Setup.exe`).
+Artifacts in `release/`:
+
+| File | Description |
+|------|-------------|
+| `AJ-Motorbike-Spares-Setup-1.0.0.exe` | NSIS installer (Start Menu + Desktop shortcuts) |
+| `AJ-Motorbike-Spares-Portable-1.0.0.exe` | Portable executable |
+
+Copy the Setup.exe to a USB drive, run it on the shop PC, launch **AJ Motorbike Spares**, log in, and start selling — no Node, Git, or internet required.
+
+Business data is stored outside the install folder:
+
+`%APPDATA%\\AJ Motorbike Spares\\aj-motorbike-spares.sqlite`
+
+Full install / backup / update steps: see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
 ## Architecture
 
@@ -68,8 +84,6 @@ Electron Main
   → Preload bridge (contextIsolation)
   → React renderer
 ```
-
-Database file lives in the Electron userData directory as `aj-motorbike-spares.sqlite`.
 
 ## Offline
 
