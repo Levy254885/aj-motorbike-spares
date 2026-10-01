@@ -1,88 +1,76 @@
-# A.J Motorbike Spares & Accessories
+# AJ Motorbike Spares
 
-**Single-shop** Inventory, POS, and business management PWA.
+**Offline desktop POS + Inventory** for AJ Motorbike Spares.
 
-Currency: **KSh** · Backend: **Firebase Auth + Cloud Firestore only** (no Storage).
+Built with **Electron · React · TypeScript · SQLite (better-sqlite3)**.
+
+No Firebase. No cloud database. No internet required for normal operation.
 
 ## Features
 
-- Login / roles (ADMIN, MANAGER, CASHIER, STOREKEEPER)
-- Dashboard with sales analysis (today / 7 days / month, payment methods, inventory value)
-- Products & inventory (search, stock status, adjustments)
-- POS with stock-safe checkout and receipt numbers `AJ-000001`
-- Sales history & profit per sale
-- Customers, suppliers, expenses, purchases, stock movements, reports
+- Local admin / cashier login (password or PIN, PBKDF2 hashed)
+- Role-based screens
+- Live dashboard (today’s sales, transactions, low stock, inventory value)
+- Product & category management with realistic motorcycle spare seed data
+- Inventory adjustments with full movement history
+- POS with barcode-scanner-friendly search, cart, stock checks
+- Payment methods: Cash, M-Pesa, Card, Other
+- Atomic sales transactions (sale + line items + stock + movements + payment)
+- Invoice numbers: `AJ-YYYYMMDD-0001`
+- Receipts (print via OS printer dialog)
+- Optional customers
+- Returns / refunds with stock restore
+- Sales, product, cashier, profit, inventory, low-stock reports (CSV / PDF export)
+- Settings, user management
+- Database backup / restore / export
 
-## Setup (required)
+## Default logins
 
-### 1. Firebase project
+| Role    | Username | Password    | PIN  |
+|---------|----------|-------------|------|
+| Admin   | `admin`  | `admin123`  | `1234` |
+| Cashier | `cashier`| `cashier123`| `1111` |
 
-1. Create project at https://console.firebase.google.com
-2. Enable **Authentication → Email/Password**
-3. Create **Firestore** database (start in production mode)
-4. Deploy rules from `firestore.rules` in this repo
-5. Register a **Web app** and copy config
+Change these before production use.
 
-### 2. Environment variables (Vercel)
+## Currency
 
-Set these, then **Redeploy**:
+**KES** (configurable in Settings).
 
-- `VITE_FIREBASE_API_KEY`
-- `VITE_FIREBASE_AUTH_DOMAIN`
-- `VITE_FIREBASE_PROJECT_ID`
-- `VITE_FIREBASE_MESSAGING_SENDER_ID`
-- `VITE_FIREBASE_APP_ID`
-
-Do **not** use Storage. No `VITE_FIREBASE_STORAGE_BUCKET` required.
-
-### 3. First admin user
-
-1. Firebase Console → Authentication → Add user  
-   - Email: your admin email (e.g. the shop owner email)  
-   - Password: choose a strong password (never commit it)
-2. Copy the user's **UID**
-3. Firestore → collection `users` → document ID = **UID** with fields:
-
-```json
-{
-  "email": "your-admin@email.com",
-  "displayName": "Admin",
-  "role": "ADMIN",
-  "active": true,
-  "createdAt": "2026-09-19T00:00:00.000Z",
-  "updatedAt": "2026-09-19T00:00:00.000Z"
-}
-```
-
-4. Sign in on the deployed app with that email and password.
-
-### 4. Indexes
-
-If Firestore asks for composite indexes (products active+name, sales createdAt), click the link in the browser console error and create them.
-
-## Local development
+## Setup (development)
 
 ```bash
 npm install
-cp .env.example .env
-# fill .env
+npm run seed   # optional; DB auto-seeds on first launch
 npm run dev
 ```
 
-## Production
+## Production build
 
 ```bash
 npm run build
 ```
 
-Deploy `dist/` to Vercel (SPA rewrite already in `vercel.json`).
+## Windows installer
 
-## Security
+```bash
+npm run dist
+```
 
-- Never commit `.env` or passwords
-- Role checks are in `firestore.rules`
-- Cashier can create sales; cannot change cost prices without manager/admin product rights
+Output is under `release/`. On Windows this produces an NSIS installer (e.g. `AJ Motorbike Spares Setup.exe`).
 
-## Single shop
+## Architecture
 
-This system is for **one shop only** — A.J Motorbike Spares & Accessories. No multi-branch mode.
+```
+Electron Main
+  → SQLite (better-sqlite3) + business services
+  → IPC
+  → Preload bridge (contextIsolation)
+  → React renderer
+```
+
+Database file lives in the Electron userData directory as `aj-motorbike-spares.sqlite`.
+
+## Offline
+
+After install, the app works with **no internet**: login, POS, inventory, sales, receipts, reports, backup, restore.
