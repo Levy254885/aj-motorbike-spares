@@ -68,10 +68,36 @@ const PRODUCTS: Array<[string, string, string, string, number, number, number, n
 ];
 
 export function getDatabasePath() {
-  const electronApp = app as typeof app | undefined;
-  const userData = electronApp?.isReady?.() ? electronApp.getPath('userData') : process.cwd();
+  // Always use Electron userData when available so app updates never wipe business data.
+  // Windows example: %APPDATA%\\AJ Motorbike Spares\\aj-motorbike-spares.sqlite
+  let userData = process.cwd();
+  try {
+    if (app && typeof app.getPath === 'function') {
+      userData = app.getPath('userData');
+    }
+  } catch {
+    // app not ready / not in electron context (e.g. seed script)
+  }
   fs.mkdirSync(userData, { recursive: true });
   return path.join(userData, 'aj-motorbike-spares.sqlite');
+}
+
+/** Apply incremental schema upgrades safely without wiping data. */
+export function runMigrations(db: Sqlite) {
+  db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL
+  )`);
+  const row = db.prepare('SELECT MAX(version) as v FROM schema_migrations').get() as { v: number | null };
+  let current = row?.v ?? 0;
+  // Future migrations go here, e.g.:
+  // if (current < 2) { db.exec('ALTER TABLE ...'); db.prepare('INSERT INTO schema_migrations ...').run(2, ...); current = 2; }
+  if (current < 1) {
+    db.prepare('INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      1,
+      new Date().toISOString()
+    );
+  }
 }
 
 export function connectDatabase(filePath = getDatabasePath()) {
@@ -80,6 +106,7 @@ export function connectDatabase(filePath = getDatabasePath()) {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
   sqlite.exec(initialMigration);
+  runMigrations(sqlite);
   seedDatabase(sqlite);
   orm = drizzle(sqlite, { schema });
   return sqlite;
