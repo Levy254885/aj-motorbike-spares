@@ -41,12 +41,13 @@ export function listProducts(search = '', includeInactive = false) {
   return getDb()
     .prepare(
       `
-    SELECT products.id, products.name, sku, barcode, category_id as categoryId, categories.name as categoryName,
-           description, unit, purchase_price as purchasePrice, selling_price as sellingPrice, stock_quantity as stockQuantity,
+    SELECT products.id, products.name, products.sku, products.barcode, products.category_id as categoryId, categories.name as categoryName, products.description, products.unit, products.purchase_price as purchasePrice, products.selling_price as sellingPrice, products.stock_quantity as stockQuantity,
            low_stock_threshold as lowStockThreshold, products.active
     FROM products LEFT JOIN categories ON categories.id = products.category_id
     WHERE (? = 1 OR products.active = 1)
-      AND (? = '%%' OR products.name LIKE ? OR sku LIKE ? OR IFNULL(barcode, '') LIKE ?)
+      AND (? = '%%' OR products.name
+      LIKE ? OR products.sku LIKE ? OR
+      IFNULL(products.barcode, '') LIKE ?)
     ORDER BY products.name LIMIT 300
   `
     )
