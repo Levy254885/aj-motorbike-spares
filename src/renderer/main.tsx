@@ -98,7 +98,7 @@ function Login({ onLogin, notify }: { onLogin: (user: SessionUser) => void; noti
         <button className="primary" disabled={busy}>
           {busy ? 'Signing in...' : 'Sign in'}
         </button>
-        <p className="hint">Admin: admin / admin123 · Cashier: cashier / cashier123</p>
+      
       </form>
     </div>
   );
